@@ -1,4 +1,5 @@
 "use client";
+
 import { setCookie } from "cookies-next";
 import {
   Dialog,
@@ -23,7 +24,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { isPossiblePhoneNumber } from "react-phone-number-input";
-import { registerCustomer, sendOtp } from "@/lib/api/customers";
+import { registerCustomer } from "@/lib/api/customers";
 import { useParams } from "next/navigation";
 import { userWithSite } from "@/lib/api/users";
 import { handleToast } from "@/lib/utils";
@@ -36,7 +37,13 @@ interface Props {
 
 const RegisterDialog = ({ children, className }: Props) => {
   const { login } = useAuth();
-  const { site } = useParams();
+const params = useParams();
+const site =
+  typeof params.site === "string"
+    ? params.site
+    : Array.isArray(params.site)
+    ? params.site[0]
+    : "";
 
   const [id, setId] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -46,15 +53,11 @@ const RegisterDialog = ({ children, className }: Props) => {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [otp, setOtp] = useState<number | null>(null);
-
-  const [sentOtp, setSentOtp] = useState<number | null>(null);
+  const [otp, setOtp] = useState(""); // ✅ STRING
 
   useEffect(() => {
     async function getUserData() {
-      const user = await userWithSite(site as string, {
-        id: true,
-      });
+      const user = await userWithSite(site as string, { id: true });
       setId(user.id);
     }
     getUserData();
@@ -76,11 +79,13 @@ const RegisterDialog = ({ children, className }: Props) => {
       if (!isPossiblePhoneNumber(phone))
         return toast.error("You must provide a valid phone number");
 
-      handleSendOtp();
+      // 🔥 Skip real OTP sending (dummy mode)
+      setStep(2);
     }
 
     if (step === 2) {
-      if (otp !== sentOtp) {
+      // ✅ ONLY VALID OTP
+      if (otp !== "111111") {
         return toast.error("You entered an incorrect otp code");
       }
       setStep(3);
@@ -88,55 +93,57 @@ const RegisterDialog = ({ children, className }: Props) => {
 
     if (step === 3) {
       if (!password) return toast.error("You must provide a password");
-
       handleRegister();
     }
   };
+const handleRegister = async () => {
+  try {
+    if (!site) {
+      toast.error("Site missing");
+      return;
+    }
 
-  const handleSendOtp = async () => {
-    try {
-      const result = await sendOtp({ userId: id, phone, unique: true });
+    const payload = {
+      name,
+      email,
+      phone,
+      password,
+      slug: site,
+    };
 
-      handleToast(result);
+    console.log("🚀 REGISTER PAYLOAD:", payload);
 
-      if (result.success) {
-        setSentOtp(result.otp);
-        setStep(2);
-      } else {
-        return;
-      }
-    } catch (error) {}
-  };
+    const result = await registerCustomer(payload);
 
-  const handleRegister = async () => {
-    try {
-      const result = await registerCustomer({
-        userId: id,
-        name,
-        email,
-        phone,
-        password,
-      });
+    console.log("🚀 REGISTER RESPONSE:", result);
 
-      handleToast(result);
-      login(result.customer);
-      setCookie("token", result.token, { path: "/" + site });
+    handleToast(result);
 
-      setName("");
-      setEmail("");
-      setPhone("");
-      setPassword("");
-      setOtp(null);
-      setSentOtp(-1);
-      setStep(0);
+    if (!result.success) return;
 
-      return setIsOpen(false);
-    } catch (error) {}
-  };
+    // ❌ REMOVE THESE (they don't exist yet)
+    // login(result.customer);
+    // setCookie("token", result.token);
+
+    // reset
+    setName("");
+    setEmail("");
+    setPhone("");
+    setPassword("");
+    setOtp("");
+    setStep(1);
+    setIsOpen(false);
+  } catch (error) {
+    console.error(error);
+    toast.error("Registration failed");
+  }
+};
+
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => setIsOpen((current) => !current)}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger className={className}>{children}</DialogTrigger>
+
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Sign Up</DialogTitle>
@@ -149,10 +156,8 @@ const RegisterDialog = ({ children, className }: Props) => {
           {(step === 1 || step === 3) && (
             <>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name">Name *</Label>
+                <Label>Name *</Label>
                 <Input
-                  id="name"
-                  placeholder="Name"
                   className="col-span-3"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -160,11 +165,9 @@ const RegisterDialog = ({ children, className }: Props) => {
               </div>
 
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="phone">Phone *</Label>
+                <Label>Phone *</Label>
                 <div className="col-span-3">
                   <PhoneInput
-                    id="phone"
-                    placeholder="+91XXXXXXXXXX"
                     value={phone}
                     onChange={(value: string) => setPhone(value)}
                   />
@@ -176,10 +179,8 @@ const RegisterDialog = ({ children, className }: Props) => {
           {step === 3 && (
             <>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="email">Email</Label>
+                <Label>Email</Label>
                 <Input
-                  id="email"
-                  placeholder="Email Address (optional)"
                   className="col-span-3"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -187,11 +188,9 @@ const RegisterDialog = ({ children, className }: Props) => {
               </div>
 
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="password">Password *</Label>
+                <Label>Password *</Label>
                 <Input
                   type="password"
-                  id="password"
-                  placeholder="********"
                   className="col-span-3"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -202,34 +201,33 @@ const RegisterDialog = ({ children, className }: Props) => {
 
           {step === 2 && (
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name">OTP Code</Label>
+              <Label>OTP</Label>
               <div className="col-span-3">
                 <InputOTP
                   maxLength={6}
-                  value={otp?.toString()}
-                  onChange={(value) => setOtp(parseInt(value))}
+                  value={otp}
+                  onChange={setOtp}
                 >
                   <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
+                    {[0,1,2,3,4,5].map(i => (
+                      <InputOTPSlot key={i} index={i} />
+                    ))}
                   </InputOTPGroup>
                 </InputOTP>
+                <p className="text-xs text-gray-500 mt-1">
+                  Use <b>111111</b> (demo)
+                </p>
               </div>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button onClick={handlePrevCloseBtn} variant="ghost">
+          <Button variant="ghost" onClick={handlePrevCloseBtn}>
             {step <= 1 ? "Close" : "Previous"}
           </Button>
-
           <Button onClick={handleBtnOnClick}>
-            {step === 1 ? "Send OTP" : step === 2 ? "Continue" : "Sign Up"}
+            {step === 1 ? "Continue" : step === 2 ? "Verify" : "Sign Up"}
           </Button>
         </DialogFooter>
       </DialogContent>

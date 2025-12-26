@@ -11,12 +11,16 @@ import {
 } from "@/types";
 
 // REGISTER
+// customers.ts
+// customers.ts
 export const registerCustomer = async (data: RegisterData) => {
   const url = `${apiUrl}/customers/register.php`;
 
   try {
     const response = await axios.post(url, data);
-    return { success: true, ...response.data };
+
+    // ✅ RETURN BACKEND RESPONSE AS-IS
+    return response.data;
   } catch (error: any) {
     return {
       success: false,
@@ -26,6 +30,7 @@ export const registerCustomer = async (data: RegisterData) => {
     };
   }
 };
+
 
 // SEND OTP (DEV MODE → 111111)
 export const sendOtp = async (data: sendOtpData) => {
