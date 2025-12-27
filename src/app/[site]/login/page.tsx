@@ -4,47 +4,90 @@ import { useState } from "react";
 import { loginCustomer } from "@/lib/api/customers";
 import { useRouter, useParams } from "next/navigation";
 import { setCookie } from "cookies-next";
+import { toast } from "sonner";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { site } = useParams();
+  const params = useParams();
+
+  const site = Array.isArray(params.site)
+    ? params.site[0]
+    : params.site;
 
   const [form, setForm] = useState({
-    email: "",
+    phone: "",
     password: "",
   });
 
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError("");
 
-    const res = await loginCustomer(form);
-
-    if (!res.success) {
-      setError(res.message);
+    if (!site) {
+      setError("Invalid site");
       return;
     }
 
-    // save token
-    setCookie("token", res.token, { path: `/${site}` });
+    // ✅ FORCE CORRECT PAYLOAD (NO TYPE INTERFERENCE)
+    const payload = {
+      phone: form.phone.trim(),
+      password: form.password,
+      slug: site,
+    };
 
-    router.push(`/${site}`);
+    console.log("📤 LOGIN PAYLOAD (FORCED):", payload);
+    console.log("🔑 LOGIN KEYS:", Object.keys(payload));
+
+    setLoading(true);
+
+    try {
+      const res = await loginCustomer(payload as any);
+
+      console.log("📥 LOGIN RESPONSE:", res);
+
+      if (!res?.success) {
+        setError(res?.message || "Login failed");
+        return;
+      }
+
+      setCookie("token", res.token, {
+        path: `/${site}`,
+        sameSite: "lax",
+      });
+
+      toast.success(res.message || "Login successful");
+
+      setTimeout(() => {
+        router.push(`/${site}`);
+      }, 800);
+    } catch (err) {
+      console.error("🔥 LOGIN ERROR:", err);
+      setError("Something went wrong. Check console.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="p-10 max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-5">Login</h1>
 
-      {error && <p className="text-red-500 mb-3">{error}</p>}
+      {error && (
+        <p className="text-red-500 mb-3 text-sm">{error}</p>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
-          type="email"
+          type="tel"
           className="w-full border p-2"
-          placeholder="Email"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          placeholder="Mobile number"
+          value={form.phone}
+          onChange={(e) =>
+            setForm({ ...form, phone: e.target.value })
+          }
           required
         />
 
@@ -53,15 +96,18 @@ export default function LoginPage() {
           className="w-full border p-2"
           placeholder="Password"
           value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          onChange={(e) =>
+            setForm({ ...form, password: e.target.value })
+          }
           required
         />
 
         <button
-          className="w-full bg-blue-600 text-white p-2 rounded"
           type="submit"
+          className="w-full bg-blue-600 text-white p-2 rounded disabled:opacity-60"
+          disabled={loading}
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
       </form>
     </div>

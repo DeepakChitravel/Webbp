@@ -1,8 +1,7 @@
-"use server";
+// ❌ DO NOT USE "use server" HERE
 
-import { apiUrl } from "@/config";
 import axios from "axios";
-import { cookies } from "next/headers";
+import { apiUrl } from "@/config";
 import {
   RegisterData,
   UpdateCustomerData,
@@ -10,16 +9,26 @@ import {
   sendOtpData,
 } from "@/types";
 
-// REGISTER
-// customers.ts
-// customers.ts
+/* ===============================
+   AXIOS INSTANCE (CLIENT SAFE)
+================================ */
+const api = axios.create({
+  baseURL: apiUrl,
+  headers: {
+    "Content-Type": "application/json",
+  },
+  withCredentials: true, // ✅ allows cookies
+});
+
+/* ===============================
+   REGISTER
+================================ */
 export const registerCustomer = async (data: RegisterData) => {
-  const url = `${apiUrl}/customers/register.php`;
-
   try {
-    const response = await axios.post(url, data);
-
-    // ✅ RETURN BACKEND RESPONSE AS-IS
+    const response = await api.post(
+      "/customers/register.php",
+      data
+    );
     return response.data;
   } catch (error: any) {
     return {
@@ -31,13 +40,15 @@ export const registerCustomer = async (data: RegisterData) => {
   }
 };
 
-
-// SEND OTP (DEV MODE → 111111)
+/* ===============================
+   SEND OTP
+================================ */
 export const sendOtp = async (data: sendOtpData) => {
-  const url = `${apiUrl}/customers/send-otp.php`;
-
   try {
-    const response = await axios.post(url, data);
+    const response = await api.post(
+      "/customers/send-otp.php",
+      data
+    );
 
     return {
       success: true,
@@ -54,34 +65,27 @@ export const sendOtp = async (data: sendOtpData) => {
   }
 };
 
-// CURRENT CUSTOMER
-export const currentCustomer = async () => {
-  const token = cookies().get("token")?.value;
-
-  try {
-    const response = await axios.get(
-      `${apiUrl}/customers/token.php`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-    return response.data;
-  } catch {
-    return null;
-  }
-};
-
-// LOGIN
+/* ===============================
+   LOGIN ✅ FIXED
+================================ */
 export const loginCustomer = async (data: customerLoginData) => {
+  console.log("📤 LOGIN PAYLOAD:", data);
+  console.log("🔑 LOGIN KEYS:", Object.keys(data));
+
   try {
-    const response = await axios.post(
-      `${apiUrl}/customers/login.php`,
+    const response = await api.post(
+      "/customers/login.php",
       data
     );
-    return { success: true, ...response.data };
+
+    console.log("📥 LOGIN RESPONSE:", response.data);
+    return response.data;
   } catch (error: any) {
+    console.error(
+      "🔥 LOGIN ERROR:",
+      error?.response?.data || error
+    );
+
     return {
       success: false,
       message:
@@ -91,14 +95,30 @@ export const loginCustomer = async (data: customerLoginData) => {
   }
 };
 
-// UPDATE PROFILE
+/* ===============================
+   CURRENT CUSTOMER
+================================ */
+export const currentCustomer = async () => {
+  try {
+    const response = await api.get(
+      "/customers/token.php"
+    );
+    return response.data;
+  } catch {
+    return null;
+  }
+};
+
+/* ===============================
+   UPDATE CUSTOMER
+================================ */
 export const updateCustomer = async ({
   id,
   data,
 }: UpdateCustomerData) => {
   try {
-    const response = await axios.post(
-      `${apiUrl}/customers/update.php?id=${id}`,
+    const response = await api.post(
+      `/customers/update.php?id=${id}`,
       data
     );
     return { success: true, ...response.data };
@@ -112,10 +132,13 @@ export const updateCustomer = async ({
   }
 };
 
+/* ===============================
+   VERIFY OTP
+================================ */
 export const verifyOtp = async (data: any) => {
   try {
-    const res = await axios.post(
-      `${apiUrl}/customers/verify-otp.php`,
+    const res = await api.post(
+      "/customers/verify-otp.php",
       data
     );
     return res.data;

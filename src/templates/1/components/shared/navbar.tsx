@@ -12,6 +12,8 @@ import Logo from "@/components/logo";
 import LoginDialog from "../dialogs/login";
 import RegisterDialog from "../dialogs/register";
 import { useAuth } from "@/contexts/AuthContext";
+import UserMenu from "./../../../../components/navbar/user-menu";
+
 
 
 
@@ -63,27 +65,25 @@ const Navbar = ({
             </ul>
 
             {/* Right */}
-            <div className="flex items-center gap-3 text-sm">
-              {!user ? (
-                <>
-                  <LoginDialog className="flex items-center gap-2">
-                    <User size={22} />
-                    <span>Sign In</span>
-                  </LoginDialog>
+        <div className="flex items-center gap-3 text-sm">
+  {!user ? (
+    <>
+      <LoginDialog className="flex items-center gap-2">
+        <User size={22} />
+        <span>Sign In</span>
+      </LoginDialog>
 
-                  <span>/</span>
+      <span>/</span>
 
-                  <RegisterDialog className="flex items-center gap-2">
-                    <span>Sign Up</span>
-                  </RegisterDialog>
-                </>
-              ) : (
-                <Link href="/profile" className="flex items-center gap-2">
-                  <User size={22} />
-                  <span>Profile</span>
-                </Link>
-              )}
-            </div>
+      <RegisterDialog className="flex items-center gap-2">
+        <span>Sign Up</span>
+      </RegisterDialog>
+    </>
+  ) : (
+    <UserMenu />
+  )}
+</div>
+
           </div>
         </div>
       </div>

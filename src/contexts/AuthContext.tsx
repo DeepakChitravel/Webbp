@@ -1,4 +1,5 @@
 "use client";
+
 import { currentCustomer } from "@/lib/api/customers";
 import { Customer } from "@/types";
 import { deleteCookie } from "cookies-next";
@@ -19,9 +20,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({
-  children,
-}) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
   const { site } = useParams();
 
@@ -30,15 +29,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     async function getCustomer() {
       const customerData = await currentCustomer();
-      if (!user && customerData) {
-        setUser(customerData);
-      }
 
-      if (!customerData) {
+      if (customerData) {
+        setUser(customerData);
+      } else {
         setUser(null);
-        return;
       }
     }
+
     getCustomer();
   }, []);
 

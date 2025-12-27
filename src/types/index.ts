@@ -386,8 +386,9 @@ export type Customer = {
 };
 
 export type customerLoginData = {
-  user: string;
+  phone: string;   // ✅ must match backend
   password: string;
+  slug: string;    // ✅ required by backend
 };
 
 export type UpdateCustomerData = {
