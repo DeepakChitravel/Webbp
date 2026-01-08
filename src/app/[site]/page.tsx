@@ -1,5 +1,11 @@
-import PreviewPage from "@/app/preview/page";
+import Template1Home from "@/templates/1/pages/homepage";
+
+type Props = {
+  params: {
+    site: string;
+  };
+};
 
 export default function SitePage({ params }: Props) {
-  return <PreviewPage site={params.site} />;
+  return <Template1Home site={params.site} />;
 }

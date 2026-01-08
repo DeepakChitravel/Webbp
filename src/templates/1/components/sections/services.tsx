@@ -3,7 +3,12 @@ import { Service as ServiceProps } from "@/types";
 import Service from "../cards/service";
 import { uploadsUrl } from "@/config";
 
-const Services = ({ services }: { services: ServiceProps[] }) => {
+type ServicesProps = {
+  services: ServiceProps[];
+  onBook?: (service: ServiceProps) => void; // ✅ optional
+};
+
+const Services = ({ services, onBook }: ServicesProps) => {
   return (
     <section className="lg:py-20 py-8 bg-[url('/templates/1/services-bg.jpg')] bg-no-repeat bg-cover bg-center">
       <div className="container">
@@ -17,24 +22,37 @@ const Services = ({ services }: { services: ServiceProps[] }) => {
               service.user.siteSettings && service.user.siteSettings[0];
 
             return (
-              <Service
-                key={index}
-                name={service.name}
-                slug={service.slug}
-                img={uploadsUrl + "/" + service.image}
-                location=""
-                price={{
-                  price: parseInt(service.amount),
-                  mrp: service.previousAmount
-                    ? parseInt(service.previousAmount)
-                    : undefined,
-                }}
-                currency={
-                  getSymbolFromCurrency(
-                    siteSettings?.currency as string
-                  ) as string
-                }
-              />
+              <div key={index} className="relative">
+                <Service
+                  name={service.name}
+                  slug={service.slug}
+                  img={uploadsUrl + "/" + service.image}
+                  location=""
+                  price={{
+                    price: parseInt(service.amount),
+                    mrp: service.previousAmount
+                      ? parseInt(service.previousAmount)
+                      : undefined,
+                  }}
+                  currency={
+                    getSymbolFromCurrency(
+                      siteSettings?.currency as string
+                    ) as string
+                  }
+                />
+
+                {/* ✅ BOOK BUTTON (only if onBook exists) */}
+                {onBook && (
+                  <div className="mt-3 text-center">
+                    <button
+                      onClick={() => onBook(service)}
+                      className="inline-flex items-center justify-center rounded-full bg-primary px-6 py-2 text-white text-sm font-medium hover:opacity-90"
+                    >
+                      Book Now
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
