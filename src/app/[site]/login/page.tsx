@@ -53,10 +53,8 @@ export default function LoginPage() {
         return;
       }
 
-      setCookie("token", res.token, {
-        path: `/${site}`,
-        sameSite: "lax",
-      });
+
+
 
       toast.success(res.message || "Login successful");
 

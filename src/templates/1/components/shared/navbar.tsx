@@ -27,7 +27,7 @@ const Navbar = ({
   const pathname = usePathname();
   const { site } = useParams();
 
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
   return (
     <>
@@ -65,24 +65,29 @@ const Navbar = ({
             </ul>
 
             {/* Right */}
-        <div className="flex items-center gap-3 text-sm">
-  {!user ? (
-    <>
-      <LoginDialog className="flex items-center gap-2">
-        <User size={22} />
-        <span>Sign In</span>
-      </LoginDialog>
+            <div className="flex items-center gap-3 text-sm">
+              {loading ? (
+                // ⏳ During refresh → DO NOT show Sign In / Sign Up
+                <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
+              ) : user ? (
+                // ✅ Logged in
+                <UserMenu />
+              ) : (
+                // ❌ Not logged in
+                <>
+                  <LoginDialog className="flex items-center gap-2">
+                    <User size={22} />
+                    <span>Sign In</span>
+                  </LoginDialog>
 
-      <span>/</span>
+                  <span>/</span>
 
-      <RegisterDialog className="flex items-center gap-2">
-        <span>Sign Up</span>
-      </RegisterDialog>
-    </>
-  ) : (
-    <UserMenu />
-  )}
-</div>
+                  <RegisterDialog className="flex items-center gap-2">
+                    <span>Sign Up</span>
+                  </RegisterDialog>
+                </>
+              )}
+            </div>
 
           </div>
         </div>
@@ -106,10 +111,9 @@ const Navbar = ({
                   <li key={index}>
                     <NextLink
                       href={item.link}
-                      className={`${
-                        pathname === link &&
+                      className={`${pathname === link &&
                         "text-primary relative before:w-1.5 before:h-1.5 before:bg-primary before:rounded-full before:absolute before:-bottom-3 before:left-[50%] before:-translate-x-[50%]"
-                      } font-medium transition hover:text-primary`}
+                        } font-medium transition hover:text-primary`}
                     >
                       {item.label}
                     </NextLink>
