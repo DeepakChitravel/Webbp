@@ -5,6 +5,7 @@ import { uploadsUrl } from "@/config";
 import { getDoctorSchedulesForSite } from "@/lib/api/doctor-schedule";
 import { useAuth } from "@/contexts/AuthContext";
 import { createDoctorAppointment } from "@/lib/api/doctor-appointments";
+import { getSiteSettings } from "@/lib/api/site-settings"; // Add this import
 
 import {
   Calendar,
@@ -34,7 +35,10 @@ import {
   Trash2,
   File,
   Eye,
-  X as XIcon
+  X as XIcon,
+  Wallet,
+  Banknote,
+  Smartphone
 } from "lucide-react";
 
 // Generate calendar days
@@ -93,19 +97,19 @@ const MONTHS = [
 // Convert 24-hour time to 12-hour format with AM/PM
 const formatTime12Hour = (time: string) => {
   if (!time) return "";
-  
+
   if (time.includes('AM') || time.includes('PM')) {
     return time.replace(/(AM|PM)/, ' $1').trim();
   }
-  
+
   try {
     const [hours, minutes] = time.split(':');
     const hour = parseInt(hours, 10);
     if (isNaN(hour)) return time;
-    
+
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
-    
+
     return `${hour12}:${minutes} ${ampm}`;
   } catch (e) {
     return time;
@@ -130,7 +134,39 @@ interface BookingModalProps {
   selectedDate: Date;
   selectedSlot: any;
   user: any;
+  siteSettings: any; // ADD THIS LINE
 }
+const PAYMENT_STYLES: Record<string, {
+  container: string;
+  iconBg: string;
+  text: string;
+  check: string;
+}> = {
+  blue: {
+    container: "border-blue-500 bg-blue-50",
+    iconBg: "bg-blue-100",
+    text: "text-blue-700",
+    check: "border-blue-500 bg-blue-500",
+  },
+  purple: {
+    container: "border-purple-500 bg-purple-50",
+    iconBg: "bg-purple-100",
+    text: "text-purple-700",
+    check: "border-purple-500 bg-purple-500",
+  },
+  green: {
+    container: "border-green-500 bg-green-50",
+    iconBg: "bg-green-100",
+    text: "text-green-700",
+    check: "border-green-500 bg-green-500",
+  },
+  amber: {
+    container: "border-amber-500 bg-amber-50",
+    iconBg: "bg-amber-100",
+    text: "text-amber-700",
+    check: "border-amber-500 bg-amber-500",
+  },
+};
 
 const BookingModal = ({
   isOpen,
@@ -139,19 +175,75 @@ const BookingModal = ({
   selectedDate,
   selectedSlot,
   user,
+  siteSettings, // Add this prop
 }: BookingModalProps) => {
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
     email: "",
     token: "1",
-    notes: ""
+    notes: "",
+    paymentMethod: "cash" // Add payment method
   });
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useState<HTMLInputElement | null>(null);
+  const enabledGateways = getEnabledPaymentGateways(siteSettings);
+  const paymentEnabled = enabledGateways.length > 0;
+
+
+  // Helper function to check if payment is enabled
+
+
+  // Helper function to get enabled payment methods
+  // Helper function to check which payment methods are enabled
+  const getEnabledPaymentMethods = () => {
+    const methods = [];
+
+    if (enabledGateways.includes("Razorpay")) {
+      methods.push({
+        id: "razorpay",
+        name: "Razorpay",
+        description: "Cards, UPI, NetBanking",
+        icon: "💳",
+        color: "blue",
+      });
+    }
+
+    if (enabledGateways.includes("PhonePe")) {
+      methods.push({
+        id: "phonepe",
+        name: "PhonePe",
+        description: "UPI, Wallet",
+        icon: "📱",
+        color: "purple",
+      });
+    }
+
+    if (enabledGateways.includes("PayU")) {
+      methods.push({
+        id: "payu",
+        name: "PayU",
+        description: "Multiple payment options",
+        icon: "💰",
+        color: "green",
+      });
+    }
+
+    // Cash is ALWAYS available
+    methods.push({
+      id: "cash",
+      name: "Cash",
+      description: "Pay at hospital",
+      icon: "🏥",
+      color: "amber",
+    });
+
+    return methods;
+  };
+
 
   useEffect(() => {
     if (isOpen && user) {
@@ -184,7 +276,7 @@ const BookingModal = ({
     }));
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
-    
+
     // Simulate upload progress
     newFiles.forEach(file => {
       simulateUpload(file.id);
@@ -261,68 +353,69 @@ const BookingModal = ({
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    const validFiles = files.filter(file => 
+    const validFiles = files.filter(file =>
       file.type.startsWith('image/') || file.type === 'application/pdf'
     );
-    
+
     if (validFiles.length > 0) {
       handleFiles(validFiles);
     }
   };
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsSubmitting(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
 
-  try {
-    // ✅ 1. CREATE FormData FIRST
-const formDataWithFiles = new FormData();
+    try {
+      // Create FormData
+      const formDataWithFiles = new FormData();
 
-formDataWithFiles.append("doctorId", doctor.id.toString());
-formDataWithFiles.append("date", selectedDate.toISOString());
-formDataWithFiles.append(
-  "slot",
-  JSON.stringify({
-    from: selectedSlot.from,
-    to: selectedSlot.to,
-  })
-);
-formDataWithFiles.append("token", formData.token);
-formDataWithFiles.append("notes", formData.notes);
-formDataWithFiles.append("amount", calculateTotal());
+      formDataWithFiles.append("doctorId", doctor.id.toString());
+      formDataWithFiles.append("date", selectedDate.toISOString());
+      formDataWithFiles.append(
+        "slot",
+        JSON.stringify({
+          from: selectedSlot.from,
+          to: selectedSlot.to,
+        })
+      );
+      formDataWithFiles.append("token", formData.token);
+      formDataWithFiles.append("notes", formData.notes);
+      formDataWithFiles.append("amount", calculateTotal());
+      formDataWithFiles.append("paymentMethod", formData.paymentMethod); // Add payment method
 
-uploadedFiles.forEach((file, index) => {
-  formDataWithFiles.append(`files[${index}]`, file.file);
-});
-
-const res = await createDoctorAppointment(formDataWithFiles);
-
-if (!res.success) {
-  throw new Error(res.message);
-}
-
-    // ✅ 3. SUCCESS STATE
-    setBookingSuccess(true);
-
-    setTimeout(() => {
-      setBookingSuccess(false);
-      onClose();
-      setFormData({
-        name: "",
-        phone: "",
-        email: "",
-        token: "1",
-        notes: "",
+      uploadedFiles.forEach((file, index) => {
+        formDataWithFiles.append(`files[${index}]`, file.file);
       });
-      setUploadedFiles([]);
-    }, 3000);
-  } catch (error) {
-    console.error("Booking failed:", error);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
 
+      const res = await createDoctorAppointment(formDataWithFiles);
+
+      if (!res.success) {
+        throw new Error(res.message);
+      }
+
+      // Success state
+      setBookingSuccess(true);
+
+      setTimeout(() => {
+        setBookingSuccess(false);
+        onClose();
+        setFormData({
+          name: "",
+          phone: "",
+          email: "",
+          token: "1",
+          notes: "",
+          paymentMethod: "cash"
+        });
+        setUploadedFiles([]);
+      }, 3000);
+    } catch (error) {
+      console.error("Booking failed:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
@@ -337,6 +430,8 @@ if (!res.success) {
     const tokens = parseInt(formData.token) || 1;
     return (parseFloat(doctor.amount) * tokens).toFixed(2);
   };
+
+  const enabledPaymentMethods = getEnabledPaymentMethods();
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -486,6 +581,93 @@ if (!res.success) {
                       </p>
                     </div>
 
+                    {/* Payment Method Selection */}
+                    {paymentEnabled && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          Select Payment Method
+                        </label>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {enabledPaymentMethods.map((method) => (
+                            <label
+                              key={method.id}
+                              className={`relative flex flex-col items-center justify-center p-3 bg-white border-2 rounded-lg cursor-pointer transition-all duration-200 ${formData.paymentMethod === method.id
+                                  ? `PAYMENT_STYLES[method.color].container
+`
+                                  : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                                }`}
+                            >
+                              <input
+                                type="radio"
+                                name="paymentMethod"
+                                value={method.id}
+                                checked={formData.paymentMethod === method.id}
+                                onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                                className="sr-only"
+                              />
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${formData.paymentMethod === method.id
+                                  ? `PAYMENT_STYLES[method.color].iconBg
+`
+                                  : 'bg-gray-100'
+                                }`}>
+                                <span className={`text-sm font-bold ${formData.paymentMethod === method.id
+                                    ? `PAYMENT_STYLES[method.color].text
+`
+                                    : 'text-gray-700'
+                                  }`}>
+                                  {method.icon}
+                                </span>
+                              </div>
+                              <div className="text-sm font-medium text-gray-900">{method.name}</div>
+                              <div className="text-xs text-gray-600 mt-1">Online</div>
+                              <div className={`absolute top-2 right-2 w-5 h-5 border rounded-full flex items-center justify-center ${formData.paymentMethod === method.id
+                                  ? `PAYMENT_STYLES[method.color].container
+0`
+                                  : 'border-gray-300'
+                                }`}>
+                                {formData.paymentMethod === method.id && (
+                                  <CheckCircle className="h-3 w-3 text-white" />
+                                )}
+                              </div>
+                            </label>
+                          ))}
+
+                          <label className={`relative flex flex-col items-center justify-center p-3 bg-white border-2 rounded-lg cursor-pointer transition-all duration-200 ${formData.paymentMethod === 'cash'
+                              ? 'border-amber-500 bg-amber-50'
+                              : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                            }`}>
+                            <input
+                              type="radio"
+                              name="paymentMethod"
+                              value="cash"
+                              checked={formData.paymentMethod === 'cash'}
+                              onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                              className="sr-only"
+                            />
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-2 ${formData.paymentMethod === 'cash'
+                                ? 'bg-amber-100'
+                                : 'bg-gray-100'
+                              }`}>
+                              <Banknote className={`h-5 w-5 ${formData.paymentMethod === 'cash'
+                                  ? 'text-amber-600'
+                                  : 'text-gray-600'
+                                }`} />
+                            </div>
+                            <div className="text-sm font-medium text-gray-900">Cash</div>
+                            <div className="text-xs text-gray-600 mt-1">At Hospital</div>
+                            <div className={`absolute top-2 right-2 w-5 h-5 border rounded-full flex items-center justify-center ${formData.paymentMethod === 'cash'
+                                ? 'border-amber-500 bg-amber-500'
+                                : 'border-gray-300'
+                              }`}>
+                              {formData.paymentMethod === 'cash' && (
+                                <CheckCircle className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
                     {/* File Upload Section */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -497,11 +679,10 @@ if (!res.success) {
 
                       {/* Drag & Drop Area */}
                       <div
-                        className={`border-2 border-dashed rounded-xl p-6 text-center transition-all duration-200 cursor-pointer ${
-                          isDragging
+                        className={`border-2 border-dashed rounded-xl p-6 text-center transition-all duration-200 cursor-pointer ${isDragging
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'
-                        }`}
+                          }`}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
@@ -575,15 +756,14 @@ if (!res.success) {
                                     <div className="flex items-center gap-2 text-xs text-gray-500">
                                       <span>{formatFileSize(file.size)}</span>
                                       <span>•</span>
-                                      <span className={`px-2 py-0.5 rounded-full ${
-                                        file.uploadStatus === 'completed'
+                                      <span className={`px-2 py-0.5 rounded-full ${file.uploadStatus === 'completed'
                                           ? 'bg-green-100 text-green-800'
                                           : file.uploadStatus === 'uploading'
-                                          ? 'bg-blue-100 text-blue-800'
-                                          : 'bg-yellow-100 text-yellow-800'
-                                      }`}>
+                                            ? 'bg-blue-100 text-blue-800'
+                                            : 'bg-yellow-100 text-yellow-800'
+                                        }`}>
                                         {file.uploadStatus === 'completed' ? 'Uploaded' :
-                                         file.uploadStatus === 'uploading' ? 'Uploading...' : 'Pending'}
+                                          file.uploadStatus === 'uploading' ? 'Uploading...' : 'Pending'}
                                       </span>
                                     </div>
                                     {file.uploadStatus === 'uploading' && (
@@ -652,10 +832,21 @@ if (!res.success) {
                             <Loader2 className="h-5 w-5 animate-spin" />
                             Processing...
                           </>
+                        ) : paymentEnabled ? (
+                          <>
+                            {formData.paymentMethod === 'cash' ? (
+                              <Calendar className="h-5 w-5" />
+                            ) : (
+                              <CreditCard className="h-5 w-5" />
+                            )}
+                            {formData.paymentMethod === 'cash'
+                              ? `Book Appointment (₹${calculateTotal()})`
+                              : `Pay ₹${calculateTotal()} Now`}
+                          </>
                         ) : (
                           <>
-                            <CreditCard className="h-5 w-5" />
-                            Confirm & Pay ₹{calculateTotal()}
+                            <Calendar className="h-5 w-5" />
+                            Book Appointment (₹{calculateTotal()})
                           </>
                         )}
                       </button>
@@ -734,6 +925,53 @@ if (!res.success) {
                   </div>
                 </div>
 
+                {/* Payment Methods Summary */}
+                {paymentEnabled && (
+                  <div className="p-4 bg-white rounded-xl border border-gray-200">
+                    <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                      <CreditCard className="h-5 w-5 text-blue-600" />
+                      Selected Payment Method
+                    </h4>
+                    <div className={`p-3 rounded-lg border ${formData.paymentMethod === 'cash'
+                        ? 'bg-amber-50 border-amber-200'
+                        : 'bg-blue-50 border-blue-200'
+                      }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${formData.paymentMethod === 'cash'
+                            ? 'bg-amber-100'
+                            : 'bg-blue-100'
+                          }`}>
+                          {formData.paymentMethod === 'cash' ? (
+                            <Banknote className="h-5 w-5 text-amber-600" />
+                          ) : formData.paymentMethod === 'razorpay' ? (
+                            <div className="text-sm font-bold text-blue-700">RP</div>
+                          ) : formData.paymentMethod === 'phonepe' ? (
+                            <Smartphone className="h-5 w-5 text-purple-600" />
+                          ) : (
+                            <div className="text-sm font-bold text-green-700">PU</div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {formData.paymentMethod === 'cash'
+                              ? 'Pay at Hospital (Cash)'
+                              : formData.paymentMethod === 'razorpay'
+                                ? 'Razorpay (Online)'
+                                : formData.paymentMethod === 'phonepe'
+                                  ? 'PhonePe (Online)'
+                                  : 'PayU (Online)'}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {formData.paymentMethod === 'cash'
+                              ? 'Pay when you arrive at the hospital'
+                              : 'Secure online payment'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
                   <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
                     <ShieldCheck className="h-5 w-5" />
@@ -768,14 +1006,53 @@ if (!res.success) {
   );
 };
 
+const getEnabledPaymentGateways = (settings: any) => {
+  if (!settings) return [];
+
+  const gateways: string[] = [];
+
+  // Razorpay
+  if (
+    settings.razorpay_key_id &&
+    settings.razorpay_secret_key
+  ) {
+    gateways.push("Razorpay");
+  }
+
+  // PhonePe
+  if (
+    settings.phonepe_salt_key &&
+    settings.phonepe_salt_index &&
+    settings.phonepe_merchant_id
+  ) {
+    gateways.push("PhonePe");
+  }
+
+  // PayU
+  if (
+    settings.payu_api_key &&
+    settings.payu_salt
+  ) {
+    gateways.push("PayU");
+  }
+
+  return gateways;
+};
+
+
 const HomepageBooking = ({ userId }: { userId?: number }) => {
   const { user } = useAuth();
   const [doctors, setDoctors] = useState<any[]>([]);
+  const [siteSettings, setSiteSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingSettings, setLoadingSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const enabledGateways = getEnabledPaymentGateways(siteSettings);
+  const paymentEnabled = enabledGateways.length > 0;
+
   const [bookingModal, setBookingModal] = useState<{
     isOpen: boolean;
     doctor: any;
@@ -788,6 +1065,10 @@ const HomepageBooking = ({ userId }: { userId?: number }) => {
     selectedSlot: null,
   });
 
+
+  // Helper function to get enabled payment methods count
+
+
   const nextMonth = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   };
@@ -797,113 +1078,137 @@ const HomepageBooking = ({ userId }: { userId?: number }) => {
   };
 
   useEffect(() => {
+    const fetchSiteSettings = async () => {
+      if (!userId) return;
+
+      try {
+        setLoadingSettings(true);
+        const settings = await getSiteSettings(userId);
+        setSiteSettings(settings);
+      } catch (error) {
+        console.error("Error fetching site settings:", error);
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+
     if (!userId) {
       setError("Hospital information not available");
       setLoading(false);
       return;
     }
 
-    const fetchDoctors = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await getDoctorSchedulesForSite(userId);
-        
-        if (data.length === 0) {
-          setError("No doctors available for booking at this time");
-        }
-        
-        const enhancedDoctors = data.map(doctor => {
-          const leaveDates = doctor.leaveDates || [];
-          const weeklySchedule = doctor.weeklySchedule || {};
-          const hasWeeklySchedule = Object.keys(weeklySchedule).length > 0;
-          
-          const futureSchedule: { [key: string]: any } = {};
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const futureDays = 60;
-          
-          for (let i = 0; i < futureDays; i++) {
-            const date = new Date(today);
-            date.setDate(today.getDate() + i);
-            date.setHours(0, 0, 0, 0);
-            
-            const dateKey = date.toISOString().split('T')[0];
-            const dayOfWeek = DAYS_OF_WEEK[date.getDay()];
-            
-            let isLeaveDay = false;
-            for (const leaveDateStr of leaveDates) {
-              try {
-                const leaveDate = new Date(leaveDateStr);
-                leaveDate.setHours(0, 0, 0, 0);
-                
-                if (leaveDate.getTime() === date.getTime()) {
-                  isLeaveDay = true;
-                  break;
-                }
-              } catch (e) {
-                console.error("Error parsing leave date:", leaveDateStr, e);
-              }
-            }
-            
-            const daySchedule = weeklySchedule?.[dayOfWeek];
-            
-            if (isLeaveDay) {
-              futureSchedule[dateKey] = {
-                enabled: false,
-                slots: [],
-                dayOfWeek,
-                date: new Date(date),
-                isLeaveDay: true,
-                hasWeeklySchedule: hasWeeklySchedule,
-                dayHasSchedule: !!daySchedule,
-                dayEnabled: daySchedule?.enabled || false
-              };
-            } else if (daySchedule?.enabled && daySchedule.slots?.length > 0) {
-              futureSchedule[dateKey] = {
-                enabled: true,
-                slots: daySchedule.slots || [],
-                dayOfWeek,
-                date: new Date(date),
-                isLeaveDay: false,
-                hasWeeklySchedule: true,
-                dayHasSchedule: true,
-                dayEnabled: true
-              };
-            } else {
-              futureSchedule[dateKey] = {
-                enabled: false,
-                slots: [],
-                dayOfWeek,
-                date: new Date(date),
-                isLeaveDay: false,
-                hasWeeklySchedule: hasWeeklySchedule,
-                dayHasSchedule: !!daySchedule,
-                dayEnabled: daySchedule?.enabled || false
-              };
-            }
-          }
-          
-          return {
-            ...doctor,
-            weeklySchedule: weeklySchedule,
-            futureSchedule,
-            leaveDates,
-            hasWeeklySchedule: hasWeeklySchedule,
-            tokenLimit: doctor.tokenLimit || null
-          };
-        });
-        
-        setDoctors(enhancedDoctors);
+
+        // Fetch site settings and doctors in parallel
+        await Promise.all([
+          fetchSiteSettings(),
+          fetchDoctors()
+        ]);
+
       } catch (err) {
-        setError("Failed to load doctor schedules. Please try again.");
-        console.error("Error fetching doctors:", err);
+        setError("Failed to load data. Please try again.");
+        console.error("Error fetching data:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDoctors();
+    const fetchDoctors = async () => {
+      const data = await getDoctorSchedulesForSite(userId);
+
+      if (data.length === 0) {
+        setError("No doctors available for booking at this time");
+      }
+
+      const enhancedDoctors = data.map(doctor => {
+        const leaveDates = doctor.leaveDates || [];
+        const weeklySchedule = doctor.weeklySchedule || {};
+        const hasWeeklySchedule = Object.keys(weeklySchedule).length > 0;
+
+        const futureSchedule: { [key: string]: any } = {};
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const futureDays = 60;
+
+        for (let i = 0; i < futureDays; i++) {
+          const date = new Date(today);
+          date.setDate(today.getDate() + i);
+          date.setHours(0, 0, 0, 0);
+
+          const dateKey = date.toISOString().split('T')[0];
+          const dayOfWeek = DAYS_OF_WEEK[date.getDay()];
+
+          let isLeaveDay = false;
+          for (const leaveDateStr of leaveDates) {
+            try {
+              const leaveDate = new Date(leaveDateStr);
+              leaveDate.setHours(0, 0, 0, 0);
+
+              if (leaveDate.getTime() === date.getTime()) {
+                isLeaveDay = true;
+                break;
+              }
+            } catch (e) {
+              console.error("Error parsing leave date:", leaveDateStr, e);
+            }
+          }
+
+          const daySchedule = weeklySchedule?.[dayOfWeek];
+
+          if (isLeaveDay) {
+            futureSchedule[dateKey] = {
+              enabled: false,
+              slots: [],
+              dayOfWeek,
+              date: new Date(date),
+              isLeaveDay: true,
+              hasWeeklySchedule: hasWeeklySchedule,
+              dayHasSchedule: !!daySchedule,
+              dayEnabled: daySchedule?.enabled || false
+            };
+          } else if (daySchedule?.enabled && daySchedule.slots?.length > 0) {
+            futureSchedule[dateKey] = {
+              enabled: true,
+              slots: daySchedule.slots || [],
+              dayOfWeek,
+              date: new Date(date),
+              isLeaveDay: false,
+              hasWeeklySchedule: true,
+              dayHasSchedule: true,
+              dayEnabled: true
+            };
+          } else {
+            futureSchedule[dateKey] = {
+              enabled: false,
+              slots: [],
+              dayOfWeek,
+              date: new Date(date),
+              isLeaveDay: false,
+              hasWeeklySchedule: hasWeeklySchedule,
+              dayHasSchedule: !!daySchedule,
+              dayEnabled: daySchedule?.enabled || false
+            };
+          }
+        }
+
+        return {
+          ...doctor,
+          weeklySchedule: weeklySchedule,
+          futureSchedule,
+          leaveDates,
+          hasWeeklySchedule: hasWeeklySchedule,
+          tokenLimit: doctor.tokenLimit || null
+        };
+      });
+
+      setDoctors(enhancedDoctors);
+    };
+
+    fetchData();
   }, [userId]);
 
   const formatDate = (date: Date) => {
@@ -917,24 +1222,24 @@ const HomepageBooking = ({ userId }: { userId?: number }) => {
 
   const getDoctorAvailabilityForDate = (doctor: any, date: Date) => {
     const dateKey = date.toISOString().split('T')[0];
-    
+
     if (!doctor.futureSchedule) {
-      return { 
-        enabled: false, 
-        slots: [], 
-        isLeaveDay: false, 
+      return {
+        enabled: false,
+        slots: [],
+        isLeaveDay: false,
         hasWeeklySchedule: false,
         dayHasSchedule: false,
-        dayEnabled: false 
+        dayEnabled: false
       };
     }
-    
+
     const schedule = doctor.futureSchedule[dateKey];
-    
+
     if (schedule) {
       return schedule;
     }
-    
+
     const leaveDates = doctor.leaveDates || [];
     const isLeaveDay = leaveDates.some((leaveDate: string) => {
       try {
@@ -947,15 +1252,15 @@ const HomepageBooking = ({ userId }: { userId?: number }) => {
         return false;
       }
     });
-    
-    return { 
-      enabled: false, 
-      slots: [], 
+
+    return {
+      enabled: false,
+      slots: [],
       isLeaveDay: isLeaveDay,
       hasWeeklySchedule: doctor.hasWeeklySchedule || false,
       dayHasSchedule: false,
       dayEnabled: false,
-      date: date 
+      date: date
     };
   };
 
@@ -1231,7 +1536,7 @@ const HomepageBooking = ({ userId }: { userId?: number }) => {
     );
   };
 
-  if (loading) {
+  if (loading || loadingSettings) {
     return (
       <section className="py-20 bg-gradient-to-b from-gray-50 to-white">
         <div className="container mx-auto px-4">
@@ -1281,6 +1586,50 @@ const HomepageBooking = ({ userId }: { userId?: number }) => {
               Select a doctor and choose your preferred date & time slot. All consultations are confirmed instantly.
             </p>
           </div>
+
+          {/* Payment Status Indicator */}
+          {siteSettings && (
+            <div className="mb-6 p-4 bg-white rounded-2xl border border-gray-200 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg `}>
+                    <CreditCard className={`h-6 w-6 $`} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      {paymentEnabled ? "Online Payment Available" : "Pay at Hospital"}
+                    </h3>
+
+                    <p className="text-sm text-gray-600">
+                      {paymentEnabled
+                        ? `${enabledGateways.length} payment method${enabledGateways.length > 1 ? "s" : ""} enabled`
+                        : "Online payment not configured. Pay when you visit the hospital."}
+                    </p>
+
+                  </div>
+                </div>
+
+                {paymentEnabled && (
+                  <div className="flex flex-wrap gap-2">
+                    {enabledGateways.map((gateway) => (
+                      <span
+                        key={gateway}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-full ${gateway === "Razorpay"
+                            ? "bg-blue-100 text-blue-800"
+                            : gateway === "PhonePe"
+                              ? "bg-purple-100 text-purple-800"
+                              : "bg-green-100 text-green-800"
+                          }`}
+                      >
+                        {gateway}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-center sm:justify-end mb-6">
             <div className="inline-flex bg-white border border-gray-300 rounded-lg p-1 shadow-sm">
@@ -1350,13 +1699,14 @@ const HomepageBooking = ({ userId }: { userId?: number }) => {
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300">
               <div className="flex items-center gap-3 sm:gap-4">
                 <div className="p-2 sm:p-3 bg-amber-50 rounded-xl">
-                  <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600" />
+                  <CreditCard className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600" />
                 </div>
                 <div>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                    {viewMode === "calendar" ? "Calendar" : "List"}
-                  </p>
-                  <p className="text-xs sm:text-sm text-gray-600">Current View</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+  {paymentEnabled ? "Online" : "Cash"}
+</p>
+
+                  <p className="text-xs sm:text-sm text-gray-600">Payment Method</p>
                 </div>
               </div>
             </div>
@@ -1566,6 +1916,7 @@ const HomepageBooking = ({ userId }: { userId?: number }) => {
         selectedDate={bookingModal.selectedDate}
         selectedSlot={bookingModal.selectedSlot}
         user={user}
+        siteSettings={siteSettings} // Pass siteSettings to BookingModal
       />
     </>
   );
